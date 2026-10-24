@@ -1,1 +1,6 @@
-console.log("System Desk preload loaded");
+
+const { contextBridge, ipcRenderer } = require("electron");
+
+contextBridge.exposeInMainWorld("systemAPI", {
+  ping: () => ipcRenderer.invoke("system:ping")
+});

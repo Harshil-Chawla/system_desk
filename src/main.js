@@ -1,5 +1,5 @@
 
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("node:path");
 
 function createWindow() {
@@ -13,8 +13,17 @@ function createWindow() {
       nodeIntegration: false
     }
   });
-  mainWindow.loadURL("http://localhost:5173");  
+
+  mainWindow.loadURL("http://localhost:5173");
 }
+
+// Register IPC handlers before the window starts.
+ipcMain.handle("system:ping", () => {
+  return {
+    success: true,
+    message: "Secure IPC connection is working!"
+  };
+});
 
 app.whenReady().then(() => {
   createWindow();
