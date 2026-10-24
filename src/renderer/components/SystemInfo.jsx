@@ -1,12 +1,32 @@
 
-function SystemInfo() {
+function SystemInfo({ systemInfo }) {
   const details = [
-    { label: "Device Name", value: "Awaiting connection" },
-    { label: "Operating System", value: "Awaiting connection" },
-    { label: "CPU Model", value: "Awaiting connection" },
-    { label: "Architecture", value: "Awaiting connection" },
-    { label: "Total Memory", value: "Awaiting connection" },
-    { label: "Application", value: "System Desk" }
+    {
+      label: "Device Name",
+      value: systemInfo?.deviceName ?? "Loading..."
+    },
+    {
+      label: "Operating System",
+      value: systemInfo?.operatingSystem ?? "Loading..."
+    },
+    {
+      label: "CPU Model",
+      value: systemInfo?.cpu.model ?? "Loading..."
+    },
+    {
+      label: "Architecture",
+      value: systemInfo?.architecture ?? "Loading..."
+    },
+    {
+      label: "Total Memory",
+      value: systemInfo
+        ? `${systemInfo.memory.totalGB} GB`
+        : "Loading..."
+    },
+    {
+      label: "Application",
+      value: "System Desk"
+    }
   ];
 
   return (
@@ -18,7 +38,7 @@ function SystemInfo() {
         </div>
 
         <span className="connection-status">
-          Frontend preview
+          {systemInfo ? "Connected" : "Loading"}
         </span>
       </div>
 

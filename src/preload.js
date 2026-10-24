@@ -2,5 +2,6 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("systemAPI", {
-  ping: () => ipcRenderer.invoke("system:ping")
+  ping: () => ipcRenderer.invoke("system:ping"),
+  getInfo: () => ipcRenderer.invoke("system:get-info")
 });
