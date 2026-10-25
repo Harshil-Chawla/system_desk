@@ -8,6 +8,8 @@ function App() {
   const [systemInfo, setSystemInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [exportMessage, setExportMessage] = useState("");
+  const [exporting, setExporting] = useState(false);
 
   async function loadSystemInfo() {
     setLoading(true);
@@ -21,6 +23,26 @@ function App() {
       setError("Unable to retrieve system information.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function exportReport() {
+    setExporting(true);
+    setExportMessage("");
+
+    try {
+      const result = await window.systemAPI.exportReport();
+
+      if (result.canceled) {
+        setExportMessage("Export cancelled.");
+      } else if (result.success) {
+        setExportMessage("Report saved successfully!");
+      }
+    } catch (error) {
+      console.error("Report export failed:", error);
+      setExportMessage("Could not export the report.");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -49,7 +71,21 @@ function App() {
           >
             {loading ? "Loading..." : "↻ Refresh"}
           </button>
+
+          <button
+            className="refresh-button"
+            onClick={exportReport}
+            disabled={exporting}
+          >
+            {exporting ? "Exporting..." : "Export Report"}
+          </button>
         </header>
+
+        {exportMessage && (
+          <p role="status" className="muted">
+            {exportMessage}
+          </p>
+        )}
 
         {error && (
           <p role="alert" className="muted">
