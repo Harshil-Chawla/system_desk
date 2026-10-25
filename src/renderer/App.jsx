@@ -1,159 +1,169 @@
 
-import { useEffect, useState } from "react";
-import Sidebar from "./components/Sidebar.jsx";
-import StatCard from "./components/StatCard.jsx";
-import SystemInfo from "./components/SystemInfo.jsx";
+import { useCallback, useEffect, useState } from "react";
+import Sidebar from "./components/Sidebar";
+import StatCard from "./components/StatCard";
+import SystemInfo from "./components/SystemInfo";
 
 function App() {
   const [systemInfo, setSystemInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [exportMessage, setExportMessage] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [exportMessage, setExportMessage] = useState("");
 
-  async function loadSystemInfo() {
+  const loadSystemInfo = useCallback(async () => {
     setLoading(true);
     setError("");
 
     try {
-      const result = await window.systemAPI.getInfo();
-      setSystemInfo(result);
+      if (!window.systemAPI?.getInfo) {
+        throw new Error("System API is unavailable. Restart the app.");
+      }
+
+      const info = await window.systemAPI.getInfo();
+      setSystemInfo(info);
     } catch (err) {
-      console.error("Failed to load system information:", err);
-      setError("Unable to retrieve system information.");
+      setError(err.message || "Could not load system information.");
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    loadSystemInfo();
+  }, [loadSystemInfo]);
 
   async function exportReport() {
     setExporting(true);
     setExportMessage("");
 
     try {
+      if (!window.systemAPI?.exportReport) {
+        throw new Error("Report export is unavailable.");
+      }
+
       const result = await window.systemAPI.exportReport();
 
       if (result.canceled) {
         setExportMessage("Export cancelled.");
       } else if (result.success) {
-        setExportMessage("Report saved successfully!");
+        setExportMessage(`Report saved to: ${result.filePath}`);
+      } else {
+        setExportMessage("The report was not saved.");
       }
-    } catch (error) {
-      console.error("Report export failed:", error);
-      setExportMessage("Could not export the report.");
+    } catch (err) {
+      setExportMessage(
+        `Export failed: ${err.message || "Unknown error"}`
+      );
     } finally {
       setExporting(false);
     }
   }
 
-  useEffect(() => {
-    loadSystemInfo();
-  }, []);
-
   return (
-    <div className="app-layout">
+    <div className="app">
       <Sidebar />
 
-      <main className="main-content" id="dashboard">
+      <main className="main-content">
         <header className="topbar">
           <div>
-            <p className="eyebrow">DESKTOP CONTROL CENTER</p>
-            <h1>System Overview</h1>
+            <p className="eyebrow">SYSTEM OVERVIEW</p>
+            <h1>System Desk</h1>
             <p className="muted">
-              Monitor your device from one place.
+              Monitor your computer's system information.
             </p>
           </div>
 
-          <button
-            className="refresh-button"
-            onClick={loadSystemInfo}
-            disabled={loading}
-          >
-            {loading ? "Loading..." : "↻ Refresh"}
-          </button>
+          <div className="header-actions">
+            <button
+              className="secondary-button"
+              onClick={loadSystemInfo}
+              disabled={loading}
+            >
+              {loading ? "Refreshing..." : "Refresh"}
+            </button>
 
-          <button
-            className="refresh-button"
-            onClick={exportReport}
-            disabled={exporting}
-          >
-            {exporting ? "Exporting..." : "Export Report"}
-          </button>
+            <button
+              className="primary-button"
+              onClick={exportReport}
+              disabled={exporting || loading || !systemInfo}
+            >
+              {exporting ? "Exporting..." : "Export Report"}
+            </button>
+          </div>
         </header>
 
+        {error && (
+          <div className="error-message" role="alert">
+            <p>{error}</p>
+            <button
+              className="secondary-button"
+              onClick={loadSystemInfo}
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {loading && !systemInfo && (
+          <p className="status-message">Loading system information...</p>
+        )}
+
+        {!loading && !error && systemInfo && (
+          <>
+            <section className="stats-grid">
+              <StatCard
+                title="CPU Cores"
+                value={systemInfo.cpu.cores}
+                subtitle="Logical processors"
+              />
+
+              <StatCard
+                title="Memory Used"
+                value={`${systemInfo.memory.usedPercent}%`}
+                subtitle={`${systemInfo.memory.usedGB} GB used`}
+              />
+
+              <StatCard
+                title="Total Memory"
+                value={`${systemInfo.memory.totalGB} GB`}
+                subtitle={`${systemInfo.memory.freeGB} GB available`}
+              />
+
+              <StatCard
+                title="System Uptime"
+                value={systemInfo.uptime}
+                subtitle="Since the last system start"
+              />
+            </section>
+
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Device Information</h2>
+                  <p className="muted">
+                    Details reported by your operating system.
+                  </p>
+                </div>
+                <span className="status-dot">Connected</span>
+              </div>
+
+              <SystemInfo systemInfo={systemInfo} />
+            </section>
+          </>
+        )}
+
         {exportMessage && (
-          <p role="status" className="muted">
+          <p
+            className="status-message"
+            role="status"
+          >
             {exportMessage}
           </p>
         )}
 
-        {error && (
-          <p role="alert" className="muted">
-            {error}
-          </p>
-        )}
-
-        <section className="stats-grid">
-          <StatCard
-            title="CPU Cores"
-            value={systemInfo ? systemInfo.cpu.cores : "—"}
-            subtitle={
-              systemInfo
-                ? systemInfo.cpu.model
-                : loading
-                  ? "Loading system data..."
-                  : "Data unavailable"
-            }
-            icon="◈"
-          />
-
-          <StatCard
-            title="Memory Usage"
-            value={
-              systemInfo
-                ? `${systemInfo.memory.usedPercent}%`
-                : "—"
-            }
-            subtitle={
-              systemInfo
-                ? `${systemInfo.memory.usedGB} GB of ${systemInfo.memory.totalGB} GB used`
-                : loading
-                  ? "Loading system data..."
-                  : "Data unavailable"
-            }
-            icon="▤"
-          />
-
-          <StatCard
-            title="System Uptime"
-            value={systemInfo ? systemInfo.uptime : "—"}
-            subtitle="Time since system boot"
-            icon="◷"
-          />
-        </section>
-
-        <SystemInfo systemInfo={systemInfo} />
-
-        <section className="panel" style={{ marginTop: "20px" }}>
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">SYSTEM STATUS</p>
-              <h2>Connection</h2>
-            </div>
-          </div>
-
-          <p className="muted">
-            {error
-              ? error
-              : systemInfo
-                ? "System information retrieved successfully."
-                : "Connecting to the system API..."}
-          </p>
-        </section>
-
-        <footer className="app-footer">
-          <span>System Desk</span>
-          <span>Commit 4 · Live System Information</span>
+        <footer className="footer">
+          System Desk · Electron + React
         </footer>
       </main>
     </div>

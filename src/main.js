@@ -4,7 +4,6 @@ const os = require("node:os");
 const path = require("node:path");
 const { writeFile } = require("node:fs/promises");
 
-
 function formatBytes(bytes) {
   return Number((bytes / (1024 ** 3)).toFixed(2));
 }
@@ -19,8 +18,10 @@ function formatUptime(seconds) {
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
-    width: 1000,
-    height: 700,
+    width: 1100,
+    height: 750,
+    minWidth: 850,
+    minHeight: 600,
     title: "System Desk",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -32,81 +33,62 @@ function createWindow() {
   mainWindow.loadURL("http://localhost:5173");
 }
 
-// Commit 3: test the secure IPC connection.
-ipcMain.handle("system:ping", () => {
-  return {
-    success: true,
-    message: "Secure IPC connection is working!"
-  };
-});
-
-// Commit 4: return real system information.
-ipcMain.handle("system:get-info", () => {
+function getSystemInfo() {
   const cpus = os.cpus();
   const totalMemory = os.totalmem();
   const freeMemory = os.freemem();
   const usedMemory = totalMemory - freeMemory;
-  const uptimeSeconds = os.uptime();
 
   return {
     deviceName: os.hostname(),
     operatingSystem: `${os.type()} ${os.release()}`,
     platform: os.platform(),
     architecture: os.arch(),
-
     cpu: {
       model: cpus[0]?.model ?? "Unknown",
       cores: cpus.length
     },
-
     memory: {
       totalGB: formatBytes(totalMemory),
       usedGB: formatBytes(usedMemory),
       freeGB: formatBytes(freeMemory),
       usedPercent: Math.round((usedMemory / totalMemory) * 100)
     },
-
-    uptime: formatUptime(uptimeSeconds)
+    uptime: formatUptime(os.uptime())
   };
-});
+}
+
+// Secure IPC handlers
+ipcMain.handle("system:ping", () => ({
+  success: true,
+  message: "Secure IPC connection is working!"
+}));
+
+ipcMain.handle("system:get-info", () => getSystemInfo());
 
 ipcMain.handle("system:export-report", async (event) => {
-  // Only accept requests from this app's own renderer.
+  // Accept requests only from the local Vite development app.
   const senderUrl = event.senderFrame?.url;
 
-  if (
-    !senderUrl ||
-    new URL(senderUrl).origin !== "http://localhost:5173"
-  ) {
-    throw new Error("Untrusted IPC sender");
+  if (!senderUrl) {
+    throw new Error("Could not verify the IPC sender.");
   }
 
-  // Collect fresh system information in the main process.
-  const cpus = os.cpus();
-  const totalMemory = os.totalmem();
-  const freeMemory = os.freemem();
-  const usedMemory = totalMemory - freeMemory;
+  let senderOrigin;
+
+  try {
+    senderOrigin = new URL(senderUrl).origin;
+  } catch {
+    throw new Error("Invalid IPC sender URL.");
+  }
+
+  if (senderOrigin !== "http://localhost:5173") {
+    throw new Error("Untrusted IPC sender.");
+  }
 
   const report = {
     generatedAt: new Date().toISOString(),
-    deviceName: os.hostname(),
-    operatingSystem: `${os.type()} ${os.release()}`,
-    platform: os.platform(),
-    architecture: os.arch(),
-
-    cpu: {
-      model: cpus[0]?.model ?? "Unknown",
-      cores: cpus.length
-    },
-
-    memory: {
-      totalGB: formatBytes(totalMemory),
-      usedGB: formatBytes(usedMemory),
-      freeGB: formatBytes(freeMemory),
-      usedPercent: Math.round((usedMemory / totalMemory) * 100)
-    },
-
-    uptime: formatUptime(os.uptime())
+    ...getSystemInfo()
   };
 
   const { canceled, filePath } = await dialog.showSaveDialog({
@@ -121,10 +103,12 @@ ipcMain.handle("system:export-report", async (event) => {
   });
 
   if (canceled || !filePath) {
-    return { success: false, canceled: true };
+    return {
+      success: false,
+      canceled: true
+    };
   }
 
-  // Add .json if the user omitted the extension.
   const finalPath = filePath.toLowerCase().endsWith(".json")
     ? filePath
     : `${filePath}.json`;
@@ -140,7 +124,6 @@ ipcMain.handle("system:export-report", async (event) => {
     filePath: finalPath
   };
 });
-
 
 app.whenReady().then(() => {
   createWindow();

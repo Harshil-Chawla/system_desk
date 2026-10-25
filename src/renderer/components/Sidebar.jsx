@@ -3,29 +3,28 @@ function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-icon">S</div>
-        <span>System Desk</span>
+        <div className="brand-icon">SD</div>
+        <div>
+          <h2>System Desk</h2>
+          <p>Desktop Monitor</p>
+        </div>
       </div>
 
-      <p className="nav-label">WORKSPACE</p>
+      <nav className="sidebar-nav">
+        <div className="nav-item active">
+          <span>▦</span>
+          Overview
+        </div>
 
-      <nav>
-        <a className="nav-item active" href="#dashboard">
-          <span>▦</span> Dashboard
-        </a>
-
-        <a className="nav-item" href="#system">
-          <span>◈</span> System Information
-        </a>
-
-        <a className="nav-item" href="#about">
-          <span>ⓘ</span> About
-        </a>
+        <div className="nav-item">
+          <span>▤</span>
+          System Information
+        </div>
       </nav>
 
-      <div className="sidebar-footer">
-        <span className="status-dot"></span>
-        Desktop app running
+      <div className="sidebar-bottom">
+        <span className="status-indicator" />
+        <span>Desktop application</span>
       </div>
     </aside>
   );
