@@ -16,6 +16,72 @@ function formatUptime(seconds) {
   return `${days}d ${hours}h ${minutes}m`;
 }
 
+function getCpuTimes() {
+  return os.cpus().map((cpu) => ({
+    idle: cpu.times.idle,
+    total: Object.values(cpu.times).reduce(
+      (sum, time) => sum + time,
+      0
+    )
+  }));
+}
+
+// Compare two CPU readings to estimate CPU usage.
+function calculateCpuUsage(previous, current) {
+  if (!previous || previous.length !== current.length) {
+    return null;
+  }
+
+  let totalIdleDifference = 0;
+  let totalTimeDifference = 0;
+
+  for (let i = 0; i < current.length; i++) {
+    const idleDifference = current[i].idle - previous[i].idle;
+    const timeDifference = current[i].total - previous[i].total;
+
+    totalIdleDifference += idleDifference;
+    totalTimeDifference += timeDifference;
+  }
+
+  if (totalTimeDifference <= 0) {
+    return 0;
+  }
+
+  const usage =
+    (1 - totalIdleDifference / totalTimeDifference) * 100;
+
+  return Math.round(Math.max(0, Math.min(100, usage)));
+}
+
+function getSystemInfo(cpuUsage = null) {
+  const cpus = os.cpus();
+  const totalMemory = os.totalmem();
+  const freeMemory = os.freemem();
+  const usedMemory = totalMemory - freeMemory;
+
+  return {
+    deviceName: os.hostname(),
+    operatingSystem: `${os.type()} ${os.release()}`,
+    platform: os.platform(),
+    architecture: os.arch(),
+
+    cpu: {
+      model: cpus[0]?.model ?? "Unknown",
+      cores: cpus.length,
+      usagePercent: cpuUsage
+    },
+
+    memory: {
+      totalGB: formatBytes(totalMemory),
+      usedGB: formatBytes(usedMemory),
+      freeGB: formatBytes(freeMemory),
+      usedPercent: Math.round((usedMemory / totalMemory) * 100)
+    },
+
+    uptime: formatUptime(os.uptime())
+  };
+}
+
 function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1100,
@@ -33,41 +99,27 @@ function createWindow() {
   mainWindow.loadURL("http://localhost:5173");
 }
 
-function getSystemInfo() {
-  const cpus = os.cpus();
-  const totalMemory = os.totalmem();
-  const freeMemory = os.freemem();
-  const usedMemory = totalMemory - freeMemory;
-
-  return {
-    deviceName: os.hostname(),
-    operatingSystem: `${os.type()} ${os.release()}`,
-    platform: os.platform(),
-    architecture: os.arch(),
-    cpu: {
-      model: cpus[0]?.model ?? "Unknown",
-      cores: cpus.length
-    },
-    memory: {
-      totalGB: formatBytes(totalMemory),
-      usedGB: formatBytes(usedMemory),
-      freeGB: formatBytes(freeMemory),
-      usedPercent: Math.round((usedMemory / totalMemory) * 100)
-    },
-    uptime: formatUptime(os.uptime())
-  };
-}
-
-// Secure IPC handlers
 ipcMain.handle("system:ping", () => ({
   success: true,
   message: "Secure IPC connection is working!"
 }));
 
-ipcMain.handle("system:get-info", () => getSystemInfo());
+// Keep the previous CPU reading between requests.
+let previousCpuTimes = getCpuTimes();
+
+ipcMain.handle("system:get-info", () => {
+  const currentCpuTimes = getCpuTimes();
+  const cpuUsage = calculateCpuUsage(
+    previousCpuTimes,
+    currentCpuTimes
+  );
+
+  previousCpuTimes = currentCpuTimes;
+
+  return getSystemInfo(cpuUsage);
+});
 
 ipcMain.handle("system:export-report", async (event) => {
-  // Accept requests only from the local Vite development app.
   const senderUrl = event.senderFrame?.url;
 
   if (!senderUrl) {
@@ -103,10 +155,7 @@ ipcMain.handle("system:export-report", async (event) => {
   });
 
   if (canceled || !filePath) {
-    return {
-      success: false,
-      canceled: true
-    };
+    return { success: false, canceled: true };
   }
 
   const finalPath = filePath.toLowerCase().endsWith(".json")
@@ -119,10 +168,7 @@ ipcMain.handle("system:export-report", async (event) => {
     "utf8"
   );
 
-  return {
-    success: true,
-    filePath: finalPath
-  };
+  return { success: true, filePath: finalPath };
 });
 
 app.whenReady().then(() => {

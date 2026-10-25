@@ -10,18 +10,20 @@ function App() {
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
   const [exportMessage, setExportMessage] = useState("");
+  const [monitoring, setMonitoring] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const loadSystemInfo = useCallback(async () => {
-    setLoading(true);
-    setError("");
-
     try {
       if (!window.systemAPI?.getInfo) {
         throw new Error("System API is unavailable. Restart the app.");
       }
 
       const info = await window.systemAPI.getInfo();
+
       setSystemInfo(info);
+      setLastUpdated(new Date());
+      setError("");
     } catch (err) {
       setError(err.message || "Could not load system information.");
     } finally {
@@ -29,9 +31,23 @@ function App() {
     }
   }, []);
 
+  // Load system information when the dashboard first opens.
   useEffect(() => {
     loadSystemInfo();
   }, [loadSystemInfo]);
+
+  // Automatically refresh while monitoring is enabled.
+  useEffect(() => {
+    if (!monitoring) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      loadSystemInfo();
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [monitoring, loadSystemInfo]);
 
   async function exportReport() {
     setExporting(true);
@@ -60,6 +76,9 @@ function App() {
     }
   }
 
+  const cpuUsage = systemInfo?.cpu.usagePercent;
+  const memoryUsage = systemInfo?.memory.usedPercent;
+
   return (
     <div className="app">
       <Sidebar />
@@ -70,7 +89,7 @@ function App() {
             <p className="eyebrow">SYSTEM OVERVIEW</p>
             <h1>System Desk</h1>
             <p className="muted">
-              Monitor your computer's system information.
+              Monitor your computer in real time.
             </p>
           </div>
 
@@ -80,7 +99,14 @@ function App() {
               onClick={loadSystemInfo}
               disabled={loading}
             >
-              {loading ? "Refreshing..." : "Refresh"}
+              {loading ? "Loading..." : "Refresh"}
+            </button>
+
+            <button
+              className="secondary-button"
+              onClick={() => setMonitoring((previous) => !previous)}
+            >
+              {monitoring ? "Pause Monitoring" : "Resume Monitoring"}
             </button>
 
             <button
@@ -92,6 +118,24 @@ function App() {
             </button>
           </div>
         </header>
+
+        <div className="monitoring-status">
+          <span
+            className={`status-indicator ${
+              monitoring ? "" : "paused"
+            }`}
+          />
+
+          {monitoring
+            ? "Live monitoring enabled · Refreshes every 3 seconds"
+            : "Monitoring paused · Showing the last readings"}
+
+          {lastUpdated && (
+            <span className="last-updated">
+              Last updated: {lastUpdated.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
 
         {error && (
           <div className="error-message" role="alert">
@@ -106,21 +150,27 @@ function App() {
         )}
 
         {loading && !systemInfo && (
-          <p className="status-message">Loading system information...</p>
+          <p className="status-message">
+            Loading system information...
+          </p>
         )}
 
-        {!loading && !error && systemInfo && (
+        {systemInfo && (
           <>
             <section className="stats-grid">
               <StatCard
-                title="CPU Cores"
-                value={systemInfo.cpu.cores}
-                subtitle="Logical processors"
+                title="CPU Usage"
+                value={
+                  cpuUsage === null
+                    ? "Measuring..."
+                    : `${cpuUsage ?? "—"}%`
+                }
+                subtitle={`${systemInfo.cpu.cores} logical processors`}
               />
 
               <StatCard
-                title="Memory Used"
-                value={`${systemInfo.memory.usedPercent}%`}
+                title="Memory Usage"
+                value={`${memoryUsage}%`}
                 subtitle={`${systemInfo.memory.usedGB} GB used`}
               />
 
@@ -140,11 +190,67 @@ function App() {
             <section className="panel">
               <div className="panel-heading">
                 <div>
+                  <h2>Live Resource Usage</h2>
+                  <p className="muted">
+                    Current system-wide CPU and memory estimates.
+                  </p>
+                </div>
+              </div>
+
+              <div className="usage-item">
+                <div className="usage-label">
+                  <span>CPU</span>
+                  <strong>
+                    {cpuUsage == null ? "Measuring..." : `${cpuUsage}%`}
+                  </strong>
+                </div>
+
+                <div
+                  className="progress-track"
+                  role="progressbar"
+                  aria-label="CPU usage"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={cpuUsage ?? 0}
+                >
+                  <div
+                    className="progress-fill cpu-fill"
+                    style={{ width: `${cpuUsage ?? 0}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="usage-item">
+                <div className="usage-label">
+                  <span>Memory</span>
+                  <strong>{memoryUsage}%</strong>
+                </div>
+
+                <div
+                  className="progress-track"
+                  role="progressbar"
+                  aria-label="Memory usage"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={memoryUsage}
+                >
+                  <div
+                    className="progress-fill memory-fill"
+                    style={{ width: `${memoryUsage}%` }}
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section className="panel device-panel">
+              <div className="panel-heading">
+                <div>
                   <h2>Device Information</h2>
                   <p className="muted">
                     Details reported by your operating system.
                   </p>
                 </div>
+
                 <span className="status-dot">Connected</span>
               </div>
 
@@ -154,10 +260,7 @@ function App() {
         )}
 
         {exportMessage && (
-          <p
-            className="status-message"
-            role="status"
-          >
+          <p className="status-message" role="status">
             {exportMessage}
           </p>
         )}
